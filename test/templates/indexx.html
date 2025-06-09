@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>K8s Dashboard</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      display: flex;
+      height: 100vh;
+      background: #f4f6f9;
+    }
+    .sidebar {
+      width: 220px;
+      background-color: #2c3e50;
+      color: white;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar h2 {
+      font-size: 22px;
+      margin-bottom: 30px;
+    }
+    .sidebar a {
+      color: white;
+      text-decoration: none;
+      padding: 10px 0;
+      cursor: pointer;
+    }
+    .sidebar a:hover, .sidebar a.active {
+      background-color: #34495e;
+    }
+    .main {
+      flex: 1;
+      padding: 20px;
+      display: none;
+      flex-direction: column;
+    }
+    .main.active {
+      display: flex;
+    }
+    .section {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    select, input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 15px;
+    }
+    button {
+      padding: 10px;
+      margin-right: 10px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+
+    .image-block {
+      margin-bottom: 20px;
+      padding: 10px;
+      background: #ffffff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    .image-title {
+      font-weight: bold;
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+    .tag {
+      display: inline-block;
+      background: #ecf0f1;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 4px 8px;
+      margin: 3px 4px 3px 0;
+      font-size: 13px;
+    }
+
+    /* Notification Bell */
+    .notification-container {
+      position: fixed;
+      top: 15px;
+      right: 25px;
+      z-index: 999;
+    }
+
+    .bell-icon {
+      position: relative;
+      font-size: 24px;
+      cursor: pointer;
+    }
+
+    .bell-icon::before {
+      content: "🔔";
+    }
+
+    .badge {
+      position: absolute;
+      top: -8px;
+      right: -10px;
+      background: red;
+      color: white;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 50%;
+    }
+
+    .notification-dropdown {
+      display: none;
+      position: absolute;
+      top: 30px;
+      right: 0;
+      width: 300px;
+      background: white;
+      border: 1px solid #ccc;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .notification-dropdown.visible {
+      display: block;
+    }
+
+    .notification-item {
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .notification-item.unread {
+      font-weight: bold;
+      background: #f0f8ff;
+    }
+
+    .notification-item:last-child {
+      border-bottom: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h2>Deploy UI</h2>
+    <a onclick="showTab('images')" id="tab-images">Images</a>
+    <a onclick="showTab('bundles')" id="tab-bundles">Bundles</a>
+    <a onclick="showTab('deploy')" id="tab-deploy">Deploy</a>
+  </div>
+
+  <div class="notification-container">
+    <div class="bell-icon" onclick="toggleNotifications()">
+      <span class="badge" id="notification-count" style="display:none;">0</span>
+    </div>
+    <div class="notification-dropdown" id="notification-dropdown"></div>
+  </div>
+
+  <div class="main" id="images">
+    <div class="section">
+      <h3>Available Registry Images</h3>
+      <div id="imageList">Loading...</div>
+    </div>
+  </div>
+
+  <div class="main" id="bundles">
+    <div class="section">
+      <h3>Create Bundle</h3>
+      <input type="text" id="bundleName" placeholder="Enter bundle name">
+      <div id="bundleImageSelectors"></div>
+      <button onclick="saveBundle()">Save Bundle</button>
+    </div>
+    <div class="section">
+      <h3>Saved Bundles</h3>
+      <div id="bundleList"></div>
+    </div>
+  </div>
+
+  <div class="main" id="deploy">
+    <div class="section">
+      <h3>Deploy Images</h3>
+      <div id="deployImageList">Loading...</div>
+      <button onclick="deployImages()">Deploy</button>
+      <button onclick="rollbackDeployment()">Rollback</button>
+    </div>
+  </div>
+
+  <script>
+    let images = {};
+    let bundles = {};
+    let notifications = [];
+    let unreadCount = 0;
+
+    function showTab(tabId) {
+      document.querySelectorAll('.main').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+
+      document.querySelectorAll('.sidebar a').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + tabId).classList.add('active');
+    }
+
+    function loadImages() {
+      fetch('/api/images')
+        .then(res => res.json())
+        .then(data => {
+          images = data;
+          updateImagesUI();
+          updateDeployUI();
+          updateBundleUI();
+        })
+        .catch(err => {
+          document.getElementById('imageList').innerText = 'Error loading image list.';
+          document.getElementById('deployImageList').innerText = 'Error loading deploy list.';
+        });
+    }
+
+    function updateImagesUI() {
+      const imageList = document.getElementById('imageList');
+      imageList.innerHTML = '';
+
+      for (const [image, tags] of Object.entries(images)) {
+        const tagHTML = tags.map(tag => `<span class="tag">${tag}</span>`).join('');
+        imageList.innerHTML += `
+          <div class="image-block">
+            <div class="image-title">${image}</div>
+            <div>${tagHTML}</div>
+          </div>
+        `;
+      }
+    }
+
+    function updateDeployUI() {
+      const deployList = document.getElementById('deployImageList');
+      deployList.innerHTML = '';
+
+      for (const [image, tags] of Object.entries(images)) {
+        deployList.innerHTML += `
+          <div class="image-block">
+            <label>${image}</label>
+            <select id="select-${image}">
+              ${tags.map(tag => `<option value="${tag}">${tag}</option>`).join('')}
+            </select>
+          </div>
+        `;
+      }
+    }
+
+    function updateBundleUI() {
+      const selectors = document.getElementById('bundleImageSelectors');
+      selectors.innerHTML = '';
+
+      for (const [image, tags] of Object.entries(images)) {
+        selectors.innerHTML += `
+          <div class="image-block">
+            <label>${image}</label>
+            <select id="bundle-${image}">
+              ${tags.map(tag => `<option value="${tag}">${tag}</option>`).join('')}
+            </select>
+          </div>
+        `;
+      }
+    }
+
+    function saveBundle() {
+      const name = document.getElementById('bundleName').value.trim();
+      if (!name) return alert("Please enter a bundle name.");
+
+      const selected = {};
+      for (const image in images) {
+        const select = document.getElementById(`bundle-${image}`);
+        if (select) selected[image] = select.value;
+      }
+      bundles[name] = selected;
+      showBundles();
+      document.getElementById('bundleName').value = '';
+      alert("Bundle saved.");
+    }
+
+    function showBundles() {
+      const list = document.getElementById('bundleList');
+      list.innerHTML = '';
+      for (const [name, content] of Object.entries(bundles)) {
+        list.innerHTML += `
+          <div class="bundle-item">
+            <b>${name}</b><br>
+            ${Object.entries(content).map(([img, tag]) => `${img}: ${tag}`).join('<br>')}
+            <br><button onclick="loadBundle('${name}')">Load Bundle</button>
+          </div>
+        `;
+      }
+    }
+
+    function loadBundle(name) {
+      const bundle = bundles[name];
+      for (const image in bundle) {
+        const select = document.getElementById(`select-${image}`);
+        if (select) select.value = bundle[image];
+      }
+      showTab('deploy');
+    }
+
+    function deployImages() {
+      const selected = {};
+      for (const image in images) {
+        const select = document.getElementById(`select-${image}`);
+        if (select) selected[image] = select.value;
+      }
+
+      fetch('/api/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: selected })
+      })
+      .then(res => res.json())
+      .then(data => alert(data.message || data.error))
+      .catch(err => alert("Deploy failed."));
+    }
+
+    function rollbackDeployment() {
+      fetch('/api/rollback', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => alert(data.message || data.error))
+        .catch(err => alert("Rollback failed."));
+    }
+
+    // Notification Bell Functions
+    function toggleNotifications() {
+      const dropdown = document.getElementById('notification-dropdown');
+      dropdown.classList.toggle('visible');
+
+      if (dropdown.classList.contains('visible')) {
+        markAllNotificationsRead();
+      }
+    }
+
+    function markAllNotificationsRead() {
+      notifications.forEach(n => n.read = true);
+      unreadCount = 0;
+      updateNotificationUI();
+    }
+
+    function pollNotifications() {
+      fetch('/api/notifications')
+        .then(res => res.json())
+        .then(data => {
+          data.forEach(item => {
+            const key = `${item.image}:${item.tag}`;
+            if (!notifications.find(n => n.key === key)) {
+              notifications.unshift({ ...item, key, read: false });
+              unreadCount++;
+            }
+          });
+          updateNotificationUI();
+        });
+    }
+
+    function updateNotificationUI() {
+      const badge = document.getElementById('notification-count');
+      badge.style.display = unreadCount > 0 ? 'block' : 'none';
+      badge.innerText = unreadCount;
+
+      const dropdown = document.getElementById('notification-dropdown');
+      dropdown.innerHTML = notifications.map(n => `
+        <div class="notification-item ${n.read ? '' : 'unread'}">
+          New image: ${n.image}:${n.tag}
+        </div>
+      `).join('');
+    }
+
+    // Init
+    showTab('images');
+    loadImages();
+    setInterval(pollNotifications, 10000);
+  </script>
+</body>
+</html>

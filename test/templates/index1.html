@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>K8s Dashboard</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      display: flex;
+      height: 100vh;
+      background: #f4f6f9;
+    }
+    .sidebar {
+      width: 220px;
+      background-color: #2c3e50;
+      color: white;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar h2 {
+      font-size: 22px;
+      margin-bottom: 30px;
+    }
+    .sidebar a {
+      color: white;
+      text-decoration: none;
+      padding: 10px 0;
+      cursor: pointer;
+    }
+    .sidebar a:hover, .sidebar a.active {
+      background-color: #34495e;
+    }
+    .main {
+      flex: 1;
+      padding: 20px;
+      display: none;
+      flex-direction: column;
+    }
+    .main.active {
+      display: flex;
+    }
+    .section {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    select, input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 15px;
+    }
+    button {
+      padding: 10px;
+      margin-right: 10px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    .bundle-item {
+      margin-bottom: 15px;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 10px;
+    }
+    .image-block {
+      margin-bottom: 20px;
+      padding: 10px;
+      background: #ffffff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    .image-title {
+      font-weight: bold;
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+    .tag {
+      display: inline-block;
+      background: #ecf0f1;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 4px 8px;
+      margin: 3px 4px 3px 0;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h2>Deploy UI</h2>
+    <a onclick="showTab('images')" id="tab-images">Images</a>
+    <a onclick="showTab('bundles')" id="tab-bundles">Bundles</a>
+    <a onclick="showTab('deploy')" id="tab-deploy">Deploy</a>
+  </div>
+
+  <div class="main" id="images">
+    <div class="section">
+      <h3>Available Registry Images</h3>
+      <div id="imageList">Loading...</div>
+    </div>
+  </div>
+
+  <div class="main" id="bundles">
+    <div class="section">
+      <h3>Create Bundle</h3>
+      <input type="text" id="bundleName" placeholder="Enter bundle name">
+      <div id="bundleImageSelectors"></div>
+      <button onclick="saveBundle()">Save Bundle</button>
+    </div>
+    <div class="section">
+      <h3>Saved Bundles</h3>
+      <div id="bundleList"></div>
+    </div>
+  </div>
+
+  <div class="main" id="deploy">
+    <div class="section">
+      <h3>Deploy Images</h3>
+      <div id="deployImageList">Loading...</div>
+      <button onclick="deployImages()">Deploy</button>
+      <button onclick="rollbackDeployment()">Rollback</button>
+    </div>
+  </div>
+
+  <script>
+    let images = {};
+    let bundles = {};
+
+    function showTab(tabId) {
+      document.querySelectorAll('.main').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+
+      document.querySelectorAll('.sidebar a').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + tabId).classList.add('active');
+    }
+
+    function loadImages() {
+      fetch('/api/images')
+        .then(res => res.json())
+        .then(data => {
+          images = data;
+          updateImagesUI();
+          updateDeployUI();
+          updateBundleUI();
+        })
+        .catch(err => {
+          document.getElementById('imageList').innerText = 'Error loading image list.';
+          document.getElementById('deployImageList').innerText = 'Error loading deploy list.';
+        });
+    }
+
+    function updateImagesUI() {
+      const imageList = document.getElementById('imageList');
+      imageList.innerHTML = '';
+
+      if (Object.keys(images).length === 0) {
+        imageList.innerHTML = "No images found.";
+        return;
+      }
+
+      for (const [image, tags] of Object.entries(images)) {
+        const tagHTML = tags.map(tag => `<span class="tag">${tag}</span>`).join('');
+        imageList.innerHTML += `
+          <div class="image-block">
+            <div class="image-title">${image}</div>
+            <div>${tagHTML}</div>
+          </div>
+        `;
+      }
+    }
+
+    function updateDeployUI() {
+      const deployList = document.getElementById('deployImageList');
+      deployList.innerHTML = '';
+
+      for (const [image, tags] of Object.entries(images)) {
+        deployList.innerHTML += `
+          <div class="image-block">
+            <label>${image}</label>
+            <select id="select-${image}">
+              ${tags.map(tag => `<option value="${tag}">${tag}</option>`).join('')}
+            </select>
+          </div>
+        `;
+      }
+    }
+
+    function updateBundleUI() {
+      const selectors = document.getElementById('bundleImageSelectors');
+      selectors.innerHTML = '';
+
+      for (const [image, tags] of Object.entries(images)) {
+        selectors.innerHTML += `
+          <div class="image-block">
+            <label>${image}</label>
+            <select id="bundle-${image}">
+              ${tags.map(tag => `<option value="${tag}">${tag}</option>`).join('')}
+            </select>
+          </div>
+        `;
+      }
+    }
+
+    function saveBundle() {
+      const name = document.getElementById('bundleName').value.trim();
+      if (!name) return alert("Please enter a bundle name.");
+
+      const selected = {};
+      for (const image in images) {
+        const select = document.getElementById(`bundle-${image}`);
+        if (select) selected[image] = select.value;
+      }
+      bundles[name] = selected;
+      showBundles();
+      document.getElementById('bundleName').value = '';
+      alert("Bundle saved.");
+    }
+
+    function showBundles() {
+      const list = document.getElementById('bundleList');
+      list.innerHTML = '';
+      for (const [name, images] of Object.entries(bundles)) {
+        list.innerHTML += `
+          <div class="bundle-item">
+            <b>${name}</b><br>
+            ${Object.entries(images).map(([img, tag]) => `${img}: ${tag}`).join('<br>')}
+            <br><button onclick="loadBundle('${name}')">Load Bundle</button>
+          </div>
+        `;
+      }
+    }
+
+    function loadBundle(name) {
+      const bundle = bundles[name];
+      for (const image in bundle) {
+        const select = document.getElementById(`select-${image}`);
+        if (select) select.value = bundle[image];
+      }
+      showTab('deploy');
+    }
+
+    function deployImages() {
+      const selected = {};
+      for (const image in images) {
+        const select = document.getElementById(`select-${image}`);
+        if (select) selected[image] = select.value;
+      }
+
+      fetch('/api/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: selected })
+      })
+      .then(res => res.json())
+      .then(data => alert(data.message || data.error))
+      .catch(err => alert("Deploy failed."));
+    }
+
+    function rollbackDeployment() {
+      fetch('/api/rollback', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => alert(data.message || data.error))
+        .catch(err => alert("Rollback failed."));
+    }
+
+    // Init
+    showTab('images');
+    loadImages();
+  </script>
+</body>
+</html>

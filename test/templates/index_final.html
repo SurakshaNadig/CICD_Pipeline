@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kubernetes Deployment Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          animation: {
+            'fade-in': 'fadeIn 0.3s ease-in-out',
+            'slide-in': 'slideIn 0.3s ease-out',
+            'pulse-subtle': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          },
+          keyframes: {
+            fadeIn: {
+              '0%': { opacity: '0', transform: 'translateY(10px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' }
+            },
+            slideIn: {
+              '0%': { transform: 'translateX(-10px)', opacity: '0' },
+              '100%': { transform: 'translateX(0)', opacity: '1' }
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .tab-content {
+    display: none;
+    }
+    #images:target,
+    #targets:target,
+    #bundle:target,
+    #deployments:target,
+    #rollback:target {
+    display: block;
+    animation: fade-in 0.3s ease-in-out;
+    }
+    #sidebar-toggle:checked ~ .sidebar {
+    transform: translate-x-0;
+    }
+    #sidebar-toggle:checked ~ .main-content {
+    margin-left: 16rem;
+    }
+    @media (max-width: 768px) {
+    #sidebar-toggle:not(:checked) ~ .sidebar {
+      transform: translate-x-(-16rem);
+    }
+    #sidebar-toggle:not(:checked) ~ .main-content {
+      margin-left: 0;
+    }
+    }
+    .nav-link {
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+    }
+    .nav-link:hover {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1));
+    transform: translateX(4px);
+    }
+    .nav-link.active {
+    background: linear-gradient(135deg, rgb(59, 130, 246), rgb(147, 51, 234));
+    color: white;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+    .nav-link::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 3px;
+    background: linear-gradient(to bottom, rgb(59, 130, 246), rgb(147, 51, 234));
+    transform: scaleY(0);
+    transition: transform 0.2s ease;
+    }
+    .nav-link.active::before {
+    transform: scaleY(1);
+    }
+    .glassmorphism {
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+    .gradient-bg {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .card-hover {
+    transition: all 0.3s ease;
+    }
+    .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    }
+    .status-badge {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+    }
+    .btn-primary {
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    transition: all 0.2s ease;
+    }
+    .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    }
+    .btn-success {
+    background: linear-gradient(135deg, #10b981, #059669);
+    transition: all 0.2s ease;
+    }
+    .btn-success:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    }
+    .btn-danger {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    transition: all 0.2s ease;
+    }
+    .btn-danger:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    }
+    .notification-dot {
+    animation: pulse-subtle 2s infinite;
+    }
+</style>
+</head>
+<body class="bg-gradient-to-br from-gray-50 to-gray-100 font-sans min-h-screen">
+<input type="checkbox" id="sidebar-toggle" class="hidden">
+
+<!-- Sidebar -->
+<div class="sidebar fixed inset-y-0 left-0 w-64 bg-gradient-to-b from-gray-900 to-gray-800 text-white transform transition-transform duration-300 ease-in-out md:translate-x-0 z-20">
+  <div class="p-6">
+    <div class="flex items-center space-x-3 mb-8">
+      <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">KubeDeploy</h1>
+        <p class="text-xs text-gray-400">v2.1.0</p>
+      </div>
+    </div>
+
+    <nav class="space-y-2">
+      <a href="#images" class="nav-link flex items-center space-x-3 py-3 px-4 rounded-lg text-sm" onclick="setActiveTab(this)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+        </svg>
+        <span>Images</span>
+      </a>
+      <a href="#targets" class="nav-link flex items-center space-x-3 py-3 px-4 rounded-lg text-sm" onclick="setActiveTab(this)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+        </svg>
+        <span>Targets</span>
+      </a>
+      <a href="#bundle" class="nav-link flex items-center space-x-3 py-3 px-4 rounded-lg text-sm" onclick="setActiveTab(this)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+        </svg>
+        <span>Bundles</span>
+      </a>
+      <a href="#deployments" class="nav-link flex items-center space-x-3 py-3 px-4 rounded-lg text-sm" onclick="setActiveTab(this)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+        </svg>
+        <span>Deployments</span>
+      </a>
+      <a href="#rollback" class="nav-link flex items-center space-x-3 py-3 px-4 rounded-lg text-sm" onclick="setActiveTab(this)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
+        </svg>
+        <span>Rollback</span>
+      </a>
+    </nav>
+  </div>
+</div>
+
+<!-- Top Bar -->
+<div class="fixed top-0 left-0 right-0 h-16 glassmorphism flex items-center justify-between px-6 z-10 border-b border-white/20">
+<div class="flex items-center space-x-4">
+<label for="sidebar-toggle" class="text-gray-700 cursor-pointer md:hidden p-2 rounded-lg hover:bg-white/20 transition-colors">
+  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/>
+  </svg>
+</label>
+<div>
+  <h2 class="text-lg font-semibold text-gray-800">Kubernetes Dashboard</h2>
+  <p class="text-xs text-gray-600">Manage your deployments with ease</p>
+</div>
+</div>
+
+<div class="flex items-center space-x-4">
+  <div class="relative">
+    <button id= "notification-bell" class="p-2 text-gray-600 hover:text-gray-800 hover:bg-white/20 rounded-lg transition-all relative">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 01-6 0v-1m6 0H9"/>
+      </svg>
+      <span id="notification-count" class="notification-dot absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">0</span>
+    </button>
+    <!-- Dropdown -->
+  <div id="notification-dropdown" class="hidden absolute right-0 mt-2 w-80 bg-white shadow-xl rounded-lg border border-gray-200 z-50">
+    <div class="flex justify-between items-center p-4 border-b">
+      <h5 class="text-sm font-semibold text-gray-700">Notifications</h5>
+      <button id="clear-notifications" class="text-xs text-red-500 hover:underline">Clear All</button>
+    </div>    
+    <ul id="notification-list" class="max-h-60 overflow-y-auto divide-y divide-gray-100">
+      <!-- JS will inject notification items here -->
+    </ul>
+  </div>
+  </div>
+
+
+<div class="flex items-center space-x-3">
+  <div class="text-right">
+    <p class="text-sm font-medium text-gray-800">Admin</p>
+    <p class="text-xs text-gray-600">admin@ias.uni-stuttgart.com</p>
+  </div>
+  <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+    A
+  </div>
+</div>
+</div>
+</div>
+
+<!-- Main Content -->
+<div class="main-content ml-0 md:ml-64 pt-20 p-6 transition-all duration-300">
+<!-- Images Tab -->
+<div id="images" class="tab-content">
+<div class="mb-6">
+  <h3 class="text-2xl font-bold text-gray-800 mb-2">Container Images</h3>
+  <p class="text-gray-600">Browse and manage your container image repository</p>
+</div>
+
+<div class="bg-white rounded-2xl shadow-lg overflow-hidden card-hover">
+  <div class="bg-gradient-to-r from-blue-50 to-purple-50 px-6 py-4 border-b border-gray-100">
+    <div class="flex items-center justify-between">
+      <h4 class="font-semibold text-gray-800">Available Images</h4>
+      <div class="flex items-center space-x-2">
+        <span>Total:</span>
+        <span id="total-images" class="text-sm text-gray-600">0</span>
+        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Image Name</th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Description</th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Versions</th>
+          <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100" id="images-table-body">
+        <tr class="hover:bg-gray-50 transition-colors">
+          <td class="px-6 py-4">
+            <div class="flex items-center space-x-3">
+              <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                <svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M2 5a2 2 0 012-2h8a2 2 0 012 2v10a2 2 0 002 2H4a2 2 0 01-2-2V5zm3 1h6v4H5V6zm6 6H5v2h6v-2z" clip-rule="evenodd"/>
+                </svg>
+              </div>
+              <div>
+                <p class="font-semibold text-gray-800">backend-api</p>
+              </div>
+            </div>
+          </td>
+          <td class="px-6 py-4 text-gray-600">Backend API service for data processing</td>
+          <td class="px-6 py-4">
+            <details class="cursor-pointer group">
+              <summary class="text-blue-600 hover:text-blue-800 font-medium flex items-center space-x-1">
+                <span>3 versions</span>
+                <svg class="w-4 h-4 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </summary>
+              <div class="mt-2 space-y-1">
+                <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                  <span class="text-sm font-mono">v2.2.0</span>
+                  <span class="status-badge">Latest</span>
+                </div>
+                <div class="text-sm text-gray-600 px-3 py-1">v2.1.0</div>
+                <div class="text-sm text-gray-600 px-3 py-1">v2.0.0</div>
+              </div>
+            </details>
+          </td>
+          <td class="px-6 py-4">
+            <span class="status-badge">Active</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
+
+<!-- Targets Tab -->
+<div id="targets" class="tab-content">
+<div class="mb-6">
+  <h3 class="text-2xl font-bold text-gray-800 mb-2">Deployment Targets</h3>
+  <p class="text-gray-600">Manage your Kubernetes namespaces and environments</p>
+</div>
+<!-- New Target Form -->
+<div class="bg-white rounded-xl p-6 shadow-lg mb-6">
+    <h4 class="text-lg font-semibold text-gray-800 mb-4">Create New Deployment Target</h4>
+    <form id="target-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <input type="text" id="target-name" placeholder="Target Name" required class="px-4 py-2 border border-gray-200 rounded-lg">
+      <input type="text" id="target-details" placeholder="Details / Description" required class="px-4 py-2 border border-gray-200 rounded-lg">
+      <button type="submit" class="btn-primary text-white px-6 py-2 rounded-lg">Add Target</button>
+    </form>
+  </div>
+      
+      <div class="bg-white rounded-2xl shadow-lg overflow-hidden card-hover">
+        <div class="bg-gradient-to-r from-blue-50 to-purple-50 px-6 py-4 border-b border-gray-100">
+          <h4 class="font-semibold text-gray-800">Deployment Targets</h4>
+        </div>
+        
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Target Namespace</th>
+                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Description</th>
+                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Created</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100" id="targets-table-body">
+                <!-- Dynamic rows go here -->
+            </tbody>
+              
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bundle Tab -->
+    <div id="bundle" class="tab-content">
+      <div class="mb-6">
+        <h3 class="text-2xl font-bold text-gray-800 mb-2">Create Bundle</h3>
+        <p class="text-gray-600">Configure and package your applications for deployment</p>
+      </div>
+      
+      <div class="bg-white rounded-2xl shadow-lg p-8">
+        <div id="bundle-image-name-description" class="space-y-8">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div class="space-y-6">
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Bundle Name</label>
+                <input type="text" name="name" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" placeholder="Enter bundle name" required>
+              </div>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+              <textarea name="description" rows="6" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none" placeholder="Describe your bundle configuration..." required></textarea>
+            </div>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-4">Select Image Versions</label>
+            <div id="bundle-image-selectors"class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            </div>
+          </div>
+          
+          <div class="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+            <button type="button" class="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium">
+              Cancel
+            </button>
+            <!-- <button type="submit" class="btn-primary text-white px-8 py-3 rounded-xl font-medium">
+              Create Bundle
+            </button> -->
+            <button id="save-bundle-btn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+              Save Bundle
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Deployments Tab -->
+    <div id="deployments" class="tab-content">
+      <div class="mb-6">
+        <h3 class="text-2xl font-bold text-gray-800 mb-2">Active Deployments</h3>
+        <p class="text-gray-600">Deploy and manage your application bundles</p>
+      </div>
+      <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div class="bg-gradient-to-r from-blue-50 to-purple-50 px-6 py-4 border-b border-gray-100">
+          <div class="flex items-center justify-between">
+            <h4 class="font-semibold text-gray-800">Ready for Deployment</h4>
+            <div class="flex items-center space-x-2">
+            </div>
+          </div>
+        </div>
+        <div class="px-8 py-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-slate-50">
+          <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div class="flex-1 max-w-lg">
+              <div class="flex items-center gap-2 mb-2">
+                <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+                <label for="namespace-select" class="text-sm font-semibold text-slate-800 tracking-tight">
+                  Deployment Namespace
+                </label>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  Required
+                </span>
+              </div>
+              <p class="text-sm text-slate-600 leading-relaxed">
+                Select the target Kubernetes namespace for your deployment. This determines the isolation boundary and resource allocation for your application components.
+              </p>
+            </div>
+            
+            <div class="flex-shrink-0">
+              <div class="relative">
+                <select 
+                  id="namespace-select" 
+                  class="appearance-none w-full lg:w-80 px-4 py-3 pr-10 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-xl shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-slate-400"
+                >
+                  <option disabled selected value="" class="text-slate-500">
+                    Loading available namespaces...
+                  </option>
+                </select>
+                <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>   
+        
+        <div class="px-8 py-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-slate-50">
+          <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div class="flex-1 max-w-lg">
+              <div class="flex items-center gap-2 mb-2">
+                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+                <label for="strategy-select" class="text-sm font-semibold text-slate-800 tracking-tight">
+                  Deployment Strategy
+                </label>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                  Required
+                </span>
+              </div>
+              <p class="text-sm text-slate-600 leading-relaxed">
+                Choose your deployment approach to control how updates are rolled out, minimize downtime, and manage risk during application updates.
+              </p>
+            </div>
+            
+            <div class="flex-shrink-0">
+              <div class="relative">
+                <select 
+                  id="strategy-select" 
+                  class="appearance-none w-full lg:w-80 px-4 py-3 pr-10 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-xl shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 hover:border-slate-400"
+                >
+                  <option disabled selected value="" class="text-slate-500">
+                    Select deployment strategy...
+                  </option>
+                  <option value="rolling" class="py-2">
+                    🔄 Rolling-Update 
+                  </option>
+                  <option value="blue-green" class="py-2">
+                    🔵 Blue-Green 
+                  </option>
+                  <option value="canary" class="py-2">
+                    🐦 Canary 
+                  </option>
+                  <option value="a-b-testing" class="py-2">
+                    🧪 A/B Testing
+                  </option>
+                  <option value="recreate" class="py-2">
+                    ♻️ Recreate 
+                  </option>
+                </select>
+                <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                </div>
+              </div>
+              
+              <!-- Strategy info display -->
+              <div id="strategy-info" class="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200 hidden">
+                <div class="flex items-start gap-2">
+                  <div class="flex-shrink-0 mt-0.5">
+                    <div class="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                  </div>
+                  <div>
+                    <p class="text-xs font-medium text-slate-700 mb-1" id="strategy-title"></p>
+                    <p class="text-xs text-slate-600" id="strategy-description"></p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="divide-y divide-gray-100" id="deployment-bundle-list">
+            <!-- dynamically injected bundles will go here --> 
+        </div>      
+      </div>
+    </div>
+
+    <!-- Rollback Tab -->
+    <div id="rollback" class="tab-content">
+      <div class="mb-6">
+        <h3 class="text-2xl font-bold text-gray-800 mb-2">Rollback Management</h3>
+        <p class="text-gray-600">Revert deployments to previous stable versions</p>
+      </div>
+      
+      <div class="bg-white rounded-2xl shadow-lg p-8">
+        <div class="bg-gradient-to-br from-red-50 to-orange-50 border border-red-200 rounded-xl p-6 mb-8">
+          <div class="flex items-start space-x-4">
+            <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+              </svg>
+            </div>
+            <div>
+              <h4 class="font-semibold text-red-800 mb-2">Rollback Operation</h4>
+              <p class="text-red-700 text-sm">Rolling back will revert your application to a previous version. This action should be performed with caution in production environments.</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div class="space-y-6">
+            <div class="bg-gray-50 rounded-xl p-6">
+              <h5 class="font-semibold text-gray-800 mb-4">Current Deployment Status</h5>
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium text-gray-700">Environment:</span>
+                  <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">Production</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium text-gray-700">Current Version:</span>
+                  <span class="text-sm text-gray-600 font-mono">v1.0.0</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium text-gray-700">Deployment Date:</span>
+                  <span class="text-sm text-gray-600">2025-05-29 14:30</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium text-gray-700">Status:</span>
+                  <span class="status-badge">Running</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="space-y-6">
+            <div class="bg-gradient-to-br from-orange-50 to-red-50 border border-orange-200 rounded-xl p-6">
+              <h5 class="font-semibold text-gray-800 mb-4">Rollback Configuration</h5>
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Target Version</label>
+                  <select class="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent">
+                    <option value="v0.9.0">v0.9.0 (Previous Stable)</option>
+                    <option value="v0.8.5">v0.8.5</option>
+                    <option value="v0.8.0">v0.8.0</option>
+                  </select>
+                </div>
+                
+                <div class="bg-white rounded-lg p-4 border border-gray-200">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm font-medium text-gray-700">Rollback to:</span>
+                    <span class="text-sm text-gray-600 font-mono">v0.9.0</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium text-gray-700">Last known stable:</span>
+                    <span class="text-sm text-green-600">Yes</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <form action="http://localhost:8080/api/rollback" method="POST">
+              <button type="submit" class="btn-danger text-white px-8 py-4 rounded-xl font-semibold w-full flex items-center justify-center space-x-3">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
+                </svg>
+                <span>Execute Rollback</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
+    

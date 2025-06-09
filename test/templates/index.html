@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8" />
+  <title>Kubernetes Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #f8fafc;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      background: #1e293b;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      padding: 24px;
+      border-bottom: 1px solid #334155;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: bold;
+      box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+    }
+
+    .logo-text {
+      font-size: 20px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .logo-version {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 2px;
+      font-weight: 500;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 24px 0;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 24px;
+      color: #94a3b8;
+      text-decoration: none;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      font-size: 15px;
+      font-weight: 500;
+      position: relative;
+    }
+
+    .nav-item:hover {
+      background: rgba(51, 65, 85, 0.7);
+      color: white;
+      transform: translateX(4px);
+    }
+
+    .nav-item.active {
+      background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%);
+      color: white;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    }
+
+    .nav-icon {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    /* Header */
+    .header {
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 20px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .header-title {
+      font-size: 28px;
+      font-weight: 700;
+      color: #1e293b;
+      background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .user-menu {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .notification-bell {
+      position: relative;
+      padding: 10px;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+      font-size: 18px;
+    }
+
+    .notification-bell:hover {
+      background: #f1f5f9;
+      transform: scale(1.05);
+    }
+
+    .notification-badge {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 10px;
+      height: 10px;
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      border-radius: 50%;
+      border: 2px solid white;
+    }
+
+    .user-avatar {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+    }
+
+    .user-avatar:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 12px rgba(59, 130, 246, 0.4);
+    }
+
+    /* Content Area */
+    .content {
+      flex: 1;
+      padding: 32px;
+      overflow-y: auto;
+    }
+
+    .content-section {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      overflow: hidden;
+      margin-bottom: 32px;
+      border: 1px solid #f1f5f9;
+    }
+
+    .section-header {
+      padding: 24px 32px;
+      border-bottom: 1px solid #e2e8f0;
+      background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+    }
+
+    .section-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 6px;
+    }
+
+    .section-subtitle {
+      color: #64748b;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .section-stats {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-top: 16px;
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #64748b;
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .stat-value {
+      font-weight: 700;
+      color: #1e293b;
+      font-size: 16px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+    }
+
+    /* Table */
+    .table-container {
+      overflow-x: auto;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .table th {
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      color: #374151;
+      font-weight: 600;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 16px 32px;
+      text-align: left;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    .table td {
+      padding: 20px 32px;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+    }
+
+    .table tbody tr {
+      transition: all 0.2s ease;
+    }
+
+    .table tbody tr:hover {
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      transform: translateX(2px);
+    }
+
+    .image-name {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .image-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 14px;
+      font-weight: bold;
+      box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+    }
+
+    .image-details h4 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 4px;
+    }
+
+    .image-details p {
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.4;
+    }
+
+    .versions-dropdown {
+      position: relative;
+      display: inline-block;
+    }
+
+    .versions-button {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: none;
+      border: none;
+      color: #3b82f6;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+
+    .versions-button:hover {
+      background: #eff6ff;
+    }
+
+    .versions-list {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      min-width: 120px;
+      z-index: 10;
+      display: none;
+    }
+
+    .versions-list.show {
+      display: block;
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .version-item {
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #374151;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .version-item:hover {
+      background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+      color: #1f2937;
+      padding-left: 20px;
+    }
+
+    .version-item:first-child {
+      border-top-left-radius: 10px;
+      border-top-right-radius: 10px;
+    }
+
+    .version-item:last-child {
+      border-bottom-left-radius: 10px;
+      border-bottom-right-radius: 10px;
+    }
+
+    .version-item::after {
+      content: '📦';
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .version-item:hover::after {
+      opacity: 1;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: capitalize;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .status-active {
+      background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+      color: #166534;
+      border: 1px solid #a7f3d0;
+    }
+
+    .status-inactive {
+      background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+      color: #92400e;
+      border: 1px solid #fde68a;
+    }
+
+    /* Form Elements */
+    .form-group {
+      margin-bottom: 24px;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 10px;
+      font-weight: 600;
+      color: #374151;
+      font-size: 15px;
+    }
+
+    .form-input, .form-select {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 15px;
+      transition: all 0.2s ease;
+      background: white;
+    }
+
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+      transform: translateY(-1px);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+    }
+
+    .btn-secondary {
+      background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: linear-gradient(135deg, #4b5563 0%, #374151 100%);
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    }
+
+    /* Hidden sections */
+    .section {
+      display: none;
+    }
+
+    .section.active {
+      display: block;
+    }
+
+    /* Loading state */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 60px;
+      color: #64748b;
+      font-size: 16px;
+    }
+
+    .loading::before {
+      content: '';
+      width: 24px;
+      height: 24px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      margin-right: 16px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Notification dropdown */
+    .notification-dropdown {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      width: 350px;
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      z-index: 50;
+      display: none;
+      max-height: 400px;
+      overflow-y: auto;
+      margin-top: 8px;
+    }
+
+    .notification-dropdown.show {
+      display: block;
+      animation: fadeInUp 0.2s ease;
+    }
+
+    .notification-header {
+      padding: 20px;
+      border-bottom: 1px solid #e2e8f0;
+      font-weight: 700;
+      color: #1e293b;
+      font-size: 16px;
+      background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+    }
+
+    .notification-item {
+      padding: 16px 20px;
+      border-bottom: 1px solid #f1f5f9;
+      transition: all 0.2s ease;
+    }
+
+    .notification-item:hover {
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      padding-left: 24px;
+    }
+
+    .notification-item.unread {
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+      border-left: 4px solid #3b82f6;
+    }
+
+    .notification-item:last-child {
+      border-bottom: none;
+    }
+
+    .notification-content {
+      font-size: 15px;
+      color: #374151;
+      font-weight: 500;
+    }
+
+    .notification-time {
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 6px;
+    }
+
+    /* Responsive design */
+    @media (max-width: 1024px) {
+      .sidebar {
+        width: 260px;
+      }
+      
+      .content {
+        padding: 24px;
+      }
+      
+      .header {
+        padding: 16px 24px;
+      }
+      
+      .table th, .table td {
+        padding: 16px 24px;
+      }
+    }
+
+
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">K</div>
+        <div>
+          <div class="logo-text">KubeDeploy</div>
+          <div class="logo-version">v2.1.0</div>
+        </div>
+      </div>
+    </div>
+    
+    <nav class="sidebar-nav">
+      <button class="nav-item active" onclick="showSection('images')" id="nav-images">
+        <div class="nav-icon">📦</div>
+        Images
+      </button>
+      <button class="nav-item" onclick="showSection('targets')" id="nav-targets">
+        <div class="nav-icon">🎯</div>
+        Targets
+      </button>
+      <button class="nav-item" onclick="showSection('bundles')" id="nav-bundles">
+        <div class="nav-icon">📦</div>
+        Bundles
+      </button>
+      <button class="nav-item" onclick="showSection('deployments')" id="nav-deployments">
+        <div class="nav-icon">⚡</div>
+        Deployments
+      </button>
+      <button class="nav-item" onclick="showSection('rollback')" id="nav-rollback">
+        <div class="nav-icon">↩️</div>
+        Rollback
+      </button>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Header -->
+    <header class="header">
+      <h1 class="header-title" id="page-title">Container Images</h1>
+      <div class="user-menu">
+        <div class="notification-bell" onclick="toggleNotifications()">
+          🔔
+          <div class="notification-badge" id="notification-badge" style="display: none;"></div>
+          <div class="notification-dropdown" id="notification-dropdown">
+            <div class="notification-header">Notifications</div>
+            <div id="notification-list"></div>
+          </div>
+        </div>
+        <div class="user-avatar">AU</div>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="content">
+      <!-- Images Section -->
+      <div class="section active" id="images">
+        <div class="content-section">
+          <div class="section-header">
+            <h2 class="section-title">Container Images</h2>
+            <p class="section-subtitle">Browse and manage your container image repository</p>
+            <div class="section-stats">
+              <div class="stat-item">
+                <span>Total:</span>
+                <span class="stat-value" id="total-images">0</span>
+                <div class="status-dot"></div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Image Name</th>
+                  <th>Description</th>
+                  <th>Versions</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="images-table-body">
+                <tr>
+                  <td colspan="4" class="loading">Loading images...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bundles Section -->
+      <div class="section" id="bundles">
+        <div class="content-section">
+          <div class="section-header">
+            <h2 class="section-title">Create Bundle</h2>
+            <p class="section-subtitle">Group multiple images into deployment bundles</p>
+          </div>
+          
+          <div style="padding: 32px;">
+            <div class="form-group">
+              <label class="form-label">Bundle Name</label>
+              <input type="text" class="form-input" id="bundle-name" placeholder="Enter bundle name">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description</label>
+              <textarea class="form-input" id="bundle-description" rows="3" placeholder="Enter bundle description..."></textarea>
+            </div>            
+            <div id="bundle-image-selectors"></div>
+            
+            <button class="btn btn-primary" onclick="saveBundle()">Save Bundle</button>
+          </div>
+        </div>
+
+        <div class="content-section">
+          <div class="section-header">
+            <h2 class="section-title">Saved Bundles</h2>
+            <p class="section-subtitle">Manage your deployment bundles</p>
+          </div>
+          
+          <div id="bundle-list" style="padding: 32px;"></div>
+        </div>
+      </div>
+      
+      <!-- Deployments Section -->
+      <div class="section" id="deployments">
+        <div class="mb-6">
+          <h3 class="text-2xl font-bold text-gray-800 mb-2">Deploy a Saved Bundle</h3>
+          <p class="text-gray-600">Select a bundle from your saved list and deploy it to your environment</p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-lg p-6 space-y-6">
+          <!-- Bundle Selector -->
+          <div>
+            <label for="deploy-bundle-selector" class="block text-sm font-semibold text-gray-700 mb-2">Select Bundle</label>
+            <select id="deploy-bundle-selector" class="form-select w-full max-w-md">
+              <option value="">-- Select a bundle --</option>
+            </select>
+          </div>
+
+          <!-- Bundle Details -->
+          <div id="deploy-bundle-details" class="hidden border-t border-gray-200 pt-6">
+            <h4 class="text-lg font-semibold text-gray-800 mb-2" id="selected-bundle-name"></h4>
+            <p class="text-gray-600 mb-4" id="selected-bundle-description"></p>
+
+            <div class="bg-gray-50 rounded-lg p-4 space-y-2" id="selected-bundle-images">
+              <!-- Dynamically populated image list -->
+            </div>
+          </div>
+
+          <!-- Deploy Button -->
+          <div class="border-t border-gray-200 pt-6 text-right">
+            <button id="deploy-bundle-btn" onclick="submitSelectedBundle()" class="btn btn-primary px-6 py-3 text-white" disabled>
+              🚀 Deploy Bundle
+            </button>
+          </div>
+        </div>
+</div>
+
+      
+
+      <!-- Rollback Section -->
+      <div class="section" id="rollback">
+        <div class="content-section">
+          <div class="section-header">
+            <h2 class="section-title">Rollback Deployment</h2>
+            <p class="section-subtitle">Revert to previous deployment version</p>
+          </div>
+          
+          <div style="padding: 32px;">
+            <p style="margin-bottom: 24px; color: #64748b; line-height: 1.6;">
+              This will rollback the deployment to the previous version. This action cannot be undone.
+            </p>
+            <button class="btn btn-danger" onclick="rollbackDeployment()">Rollback Deployment</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Targets Section (placeholder) -->
+      <div class="section" id="targets">
+        <div class="content-section">
+          <div class="section-header">
+            <h2 class="section-title">Deployment Targets</h2>
+            <p class="section-subtitle">Manage deployment environments and targets</p>
+          </div>
+          
+          <div style="padding: 32px;">
+            <p style="color: #64748b;">Deployment targets configuration coming soon...</p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let images = {};
+    let bundles = {};
+    let notifications = [];
+    let unreadCount = 0;
+
+    // Navigation
+    function showSection(sectionId) {
+      // Update active nav item
+      document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+      document.getElementById(`nav-${sectionId}`).classList.add('active');
+
+      // Update active section
+      document.querySelectorAll('.section').forEach(section => section.classList.remove('active'));
+      document.getElementById(sectionId).classList.add('active');
+
+      // Update page title
+      const titles = {
+        'images': 'Container Images',
+        'targets': 'Deployment Targets', 
+        'bundles': 'Bundles',
+        'deployments': 'Deployments',
+        'rollback': 'Rollback'
+      };
+      document.getElementById('page-title').textContent = titles[sectionId] || 'Dashboard';
+    }
+
+    // Load images from API
+    function loadImages() {
+      fetch('/api/images')
+        .then(res => res.json())
+        .then(data => {
+          images = data;
+          updateImagesTable();
+          updateBundleUI();
+          updateImageCount();
+        })
+        .catch(err => {
+          console.error('Error loading images:', err);
+          document.getElementById('images-table-body').innerHTML = `
+            <tr><td colspan="4" style="text-align: center; color: #ef4444; padding: 60px;">
+              Error loading images. Please try again.
+            </td></tr>
+          `;
+        });
+    }
+
+    function updateImagesTable() {
+      const tbody = document.getElementById('images-table-body');
+      const imageEntries = Object.entries(images);
+      
+      if (imageEntries.length === 0) {
+        tbody.innerHTML = `
+          <tr><td colspan="4" style="text-align: center; color: #64748b; padding: 60px;">
+            No images found in registry.
+          </td></tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = imageEntries.map(([imageName, tags]) => `
+        <tr>
+          <td>
+            <div class="image-name">
+              <div class="image-icon">${imageName.charAt(0).toUpperCase()}</div>
+              <div class="image-details">
+                <h4>${imageName}</h4>
+                <p>${getImageDescription(imageName)}</p>
+              </div>
+            </div>
+          </td>
+          <td>${getImageDescription(imageName)}</td>
+          <td>
+            <details class="cursor-pointer group">
+              <summary class="text-blue-600 hover:text-blue-800 font-medium flex items-center space-x-1">
+                <span>${tags.length} version${tags.length > 1 ? 's' : ''}</span>
+                <svg class="w-4 h-4 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </summary>
+              <div class="mt-2 space-y-1">
+                ${tags.map((tag, idx) => `
+                  <div class="${idx === 0 ? 'flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2' : 'text-sm text-gray-600 px-3 py-1'}">
+                    <span class="text-sm font-mono">${tag}</span>
+                    ${idx === 0 ? '<span class="status-badge">Latest</span>' : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </details>
+          </td>
+
+          <td>
+            <span class="status-badge status-active">Active</span>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function getImageDescription(imageName) {
+      const descriptions = {
+        'backend-api': 'Backend API service for data processing',
+        'frontend-app': 'React frontend application',
+        'database': 'PostgreSQL database service',
+        'nginx': 'Nginx web server and reverse proxy'
+      };
+      return descriptions[imageName] || 'Container image for deployment';
+    }
+
+    function toggleVersions(imageName) {
+      const dropdown = document.getElementById(`versions-${imageName}`);
+      dropdown.classList.toggle('show');
+      
+      // Close other dropdowns
+      document.querySelectorAll('.versions-list').forEach(list => {
+        if (list.id !== `versions-${imageName}`) {
+          list.classList.remove('show');
+        }
+      });
+    }
+
+    function updateImageCount() {
+      const count = Object.keys(images).length;
+      document.getElementById('total-images').textContent = count;
+    }
+
+    function populateDeployBundleDropdown() {
+      const selector = document.getElementById('deploy-bundle-selector');
+      if (!selector) return;
+
+      selector.innerHTML = `<option value="">-- Select a bundle --</option>`;
+
+      Object.entries(bundles).forEach(([name, bundle]) => {
+        const description = bundle.description || 'No description';
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = `${name} — ${description}`;
+        selector.appendChild(option);
+      });
+
+      selector.onchange = displaySelectedBundle;
+    }
+
+    function displaySelectedBundle() {
+      const selector = document.getElementById('deploy-bundle-selector');
+      const name = selector.value;
+      const detailsContainer = document.getElementById('deploy-bundle-details');
+      const nameEl = document.getElementById('selected-bundle-name');
+      const descEl = document.getElementById('selected-bundle-description');
+      const imagesEl = document.getElementById('selected-bundle-images');
+      const deployBtn = document.getElementById('deploy-bundle-btn');
+
+      if (!name || !bundles[name]) {
+        detailsContainer.classList.add('hidden');
+        deployBtn.disabled = true;
+        return;
+      }
+
+      const bundle = bundles[name];
+      nameEl.textContent = name;
+      descEl.textContent = bundle.description || 'No description provided.';
+      imagesEl.innerHTML = Object.entries(bundle.images)
+        .map(([img, tag]) => `<div class="text-sm text-gray-700">• <strong>${img}</strong>: ${tag}</div>`)
+        .join('');
+      
+      detailsContainer.classList.remove('hidden');
+      deployBtn.disabled = false;
+      deployBtn.dataset.bundle = name;
+    }
+
+    function submitSelectedBundle() {
+      const name = document.getElementById('deploy-bundle-btn').dataset.bundle;
+      const bundle = bundles[name];
+      if (!bundle || !bundle.images) {
+        alert('No valid bundle selected.');
+        return;
+      }
+
+      fetch('/api/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: bundle.images })
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert(data.message || 'Deployment started successfully!');
+      })
+      .catch(err => {
+        console.error(err);
+        alert('Deployment failed.');
+      });
+    }
+
+    function updateBundleUI() {
+      const selectors = document.getElementById('bundle-image-selectors');
+      selectors.innerHTML = '';
+
+      Object.entries(images).forEach(([imageName, tags]) => {
+        selectors.innerHTML += `
+          <div class="form-group">
+            <label class="form-label">${imageName}</label>
+            <select class="form-select" id="bundle-${imageName}">
+              ${tags.map(tag => `<option value="${tag}">${tag}</option>`).join('')}
+            </select>
+          </div>
+        `;
+      });
+    }
+
+    function saveBundle() {
+      const name = document.getElementById('bundle-name').value.trim();
+      const description = document.getElementById('bundle-description').value.trim();
+
+      if (!name) {
+        alert('Please enter a bundle name.');
+        return;
+      }
+
+      const selected = {};
+      Object.keys(images).forEach(imageName => {
+        const select = document.getElementById(`bundle-${imageName}`);
+        if (select) selected[imageName] = select.value;
+      });
+
+      const newBundle = {
+        description: description || 'No description provided.',
+        images: selected
+      };
+
+      fetch('/api/bundles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [name]: newBundle })
+      })
+      .then(res => res.json())
+      .then(data => {
+        bundles[name] = newBundle;
+        updateBundleList();
+        document.getElementById('bundle-name').value = '';
+        document.getElementById('bundle-description').value = '';
+        alert('Bundle saved successfully!');
+      })
+      .catch(err => alert('Failed to save bundle.'));
+    }
+
+
+    function updateBundleList() {
+      const list = document.getElementById('bundle-list');
+      list.innerHTML = '';
+
+      Object.entries(bundles).forEach(([name, bundle]) => {
+        const imageList = Object.entries(bundle.images)
+          .map(([img, tag]) => `<div class="text-sm text-gray-600">• ${img}:${tag}</div>`)
+          .join('');
+
+        const bundleHtml = `
+          <div class="bg-white rounded-2xl shadow p-6 mb-6">
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="text-lg font-semibold text-gray-800">${name}</h4>
+              <button onclick="deleteBundle('${name}')" class="text-red-600 text-sm hover:underline">Delete</button>
+            </div>
+            <p class="text-gray-600 mb-4">${bundle.description || 'No description provided.'}</p>
+
+            <details class="cursor-pointer group">
+              <summary class="text-blue-600 hover:text-blue-800 font-medium flex items-center space-x-2">
+                <span>Show Configuration</span>
+                <svg class="w-4 h-4 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </summary>
+              <div class="mt-4 bg-gray-50 rounded-lg p-4 space-y-2">
+                <div class="space-y-1">
+                  <span class="text-sm font-medium text-gray-700">Images:</span>
+                  <div class="pl-4 space-y-1">
+                    ${imageList}
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+        `;
+        list.innerHTML += bundleHtml;
+      });
+    }
+
+    function deleteBundle(name) {
+      if (!confirm(`Are you sure you want to delete the bundle "${name}"?`)) return;
+
+      fetch(`/api/bundles/${encodeURIComponent(name)}`, {
+        method: 'DELETE'
+      })
+      .then(res => {
+        if (!res.ok) throw new Error('Delete failed');
+        delete bundles[name];
+        updateBundleList();
+        alert(`Bundle "${name}" deleted successfully.`);
+      })
+      .catch(err => {
+        console.error('Delete error:', err);
+        alert('Failed to delete bundle.');
+      });
+    }
+
+    function loadBundle(name) {
+      const bundle = bundles[name];
+      Object.entries(bundle).forEach(([imageName, tag]) => {
+        const select = document.getElementById(`deploy-${imageName}`);
+        if (select) select.value = tag;
+      });
+      showSection('deployments');
+      alert(`Bundle "${name}" loaded successfully!`);
+    }
+
+    function deployImages() {
+      const selected = {};
+      Object.keys(images).forEach(imageName => {
+        const select = document.getElementById(`deploy-${imageName}`);
+        if (select) selected[imageName] = select.value;
+      });
+
+      fetch('/api/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: selected })
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert(data.message || 'Deployment completed successfully!');
+      })
+      .catch(err => alert('Deployment failed. Please try again.'));
+    }
+
+    function rollbackDeployment() {
+      if (!confirm('Are you sure you want to rollback the deployment? This action cannot be undone.')) {
+        return;
+      }
+
+      fetch('/api/rollback', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          alert(data.message || 'Rollback completed successfully!');
+        })
+        .catch(err => alert('Rollback failed. Please try again.'));
+    }
+
+    // Notifications
+    function toggleNotifications() {
+      const dropdown = document.getElementById('notification-dropdown');
+      dropdown.classList.toggle('show');
+
+      if (dropdown.classList.contains('show')) {
+        markAllNotificationsRead();
+      }
+    }
+
+    function markAllNotificationsRead() {
+      notifications.forEach(n => n.read = true);
+      unreadCount = 0;
+      updateNotificationUI();
+    }
+
+    function pollNotifications() {
+      fetch('/api/notifications')
+        .then(res => res.json())
+        .then(data => {
+          data.forEach(item => {
+            const key = `${item.image}:${item.tag}`;
+            if (!notifications.find(n => n.key === key)) {
+              notifications.unshift({ ...item, key, read: false, time: new Date().toLocaleTimeString() });
+              unreadCount++;
+            }
+          });
+          updateNotificationUI();
+        })
+        .catch(err => console.error('Failed to poll notifications:', err));
+    }
+
+    function updateNotificationUI() {
+      const badge = document.getElementById('notification-badge');
+      badge.style.display = unreadCount > 0 ? 'block' : 'none';
+
+      const list = document.getElementById('notification-list');
+      if (notifications.length === 0) {
+        list.innerHTML = '<div style="padding: 16px; text-align: center; color: #64748b;">No notifications</div>';
+        return;
+      }
+
+      list.innerHTML = notifications.map(n => `
+        <div class="notification-item ${n.read ? '' : 'unread'}">
+          <div class="notification-content">New image: ${n.image}:${n.tag}</div>
+          <div class="notification-time">${n.time || 'Just now'}</div>
+        </div>
+      `).join('');
+    }
+
+    function loadFromBundle() {
+      const selector = document.getElementById('bundle-selector');
+      const selectedName = selector.value;
+
+      if (!selectedName) {
+        alert('Please select a bundle first.');
+        return;
+      }
+
+      if (!bundles[selectedName]) {
+        alert('Selected bundle not found.');
+        return;
+      }
+
+      loadBundle(selectedName);
+    }
+
+
+    //Load Bundles Dropdown
+    function populateBundleDropdown() {
+      const selector = document.getElementById('bundle-selector');
+      if (!selector) return;
+
+      selector.innerHTML = `<option value="">-- Select a bundle --</option>`;
+
+      Object.entries(bundles).forEach(([name, bundle]) => {
+        const description = bundle.description || 'No description';
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = `${name} — ${description}`;
+        selector.appendChild(option);
+      });
+    }
+
+    // Load bundles from API
+    function loadBundles() {
+      fetch('/api/bundles')
+        .then(res => res.json())
+        .then(data => {
+          bundles = data;
+          updateBundleList();            // for Bundles tab
+          populateBundleDropdown();      // for Bundles tab dropdown
+          populateDeployBundleDropdown(); // 🔁 new deploy tab dropdown
+        })
+        .catch(err => console.error('Failed to load bundles:', err));
+    }
+
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', function(event) {
+      if (!event.target.closest('.versions-dropdown')) {
+        document.querySelectorAll('.versions-list').forEach(list => {
+          list.classList.remove('show');
+        });
+      }
+      
+      if (!event.target.closest('.notification-bell')) {
+        document.getElementById('notification-dropdown').classList.remove('show');
+      }
+    });
+
+    // Initialize app
+    document.addEventListener('DOMContentLoaded', function() {
+      loadImages();
+      loadBundles();
+      setInterval(pollNotifications, 10000); // Poll every 10 seconds
+    });
+  </script>
+</body>
+</html>

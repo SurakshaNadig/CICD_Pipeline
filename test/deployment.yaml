@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-demo-latest.yaml
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flask-demo-latest.yaml
+  template:
+    metadata:
+      labels:
+        app: flask-demo-latest.yaml
+    spec:
+      containers:
+      - image: cicd.ias.uni-stuttgart.de:5000/flask-demo:1.0.8
+        name: flask-demo
+      - image: 'cicd.ias.uni-stuttgart.de:5000/test/alpine:'
+        name: test-alpine
+      - image: 'cicd.ias.uni-stuttgart.de:5000/test/busybox:'
+        name: test-busybox
