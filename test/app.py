@@ -163,7 +163,7 @@ def deploy():
                 modified_deployments.append(deployment)
 
             elif strategy.startswith("canary-stage"):
-                print("entered canary")
+
                 try:
                     stage_num = int(strategy.split("canary-stage")[-1])
                     if not (1 <= stage_num <= 4):
@@ -182,6 +182,9 @@ def deploy():
 
                 stable_deployment["spec"]["replicas"] = stable_replicas
                 canary_deployment["spec"]["replicas"] = canary_replicas
+
+                for d in (stable_deployment, canary_deployment):
+                    d["spec"].setdefault("strategy", {})["type"] = "RollingUpdate"
 
                 # Label pods
                 stable_labels = stable_deployment["spec"]["template"].setdefault("metadata", {}).setdefault("labels", {})
