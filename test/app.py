@@ -87,10 +87,6 @@ def get_images():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-from flask import Flask, request, jsonify
-import os
-import yaml
-import copy
 
 @app.route('/api/deploy', methods=['POST'])
 def deploy():
@@ -105,7 +101,7 @@ def deploy():
 
         print(f"Namespace: {namespace}, Strategy: {strategy}, YAML file: {yaml_file}")
 
-        # Filter only server-targeted images
+        # Filter server-targeted images
         server_images = {
             name: info["version"]
             for name, info in images.items()
@@ -115,6 +111,7 @@ def deploy():
         if not server_images:
             return jsonify({"message": "No server-targeted images to deploy."}), 400
 
+        # Prepare container name → image mapping
         containers = [
             {
                 "name": name.replace("/", "-"),
@@ -122,7 +119,6 @@ def deploy():
             }
             for name, tag in server_images.items()
         ]
-
         image_lookup = {c["name"]: c["image"] for c in containers}
 
         yaml_path = os.path.join("/tmp", yaml_file)
@@ -134,34 +130,40 @@ def deploy():
 
         modified_deployments = []
 
+        def update_container_images(containers, image_lookup, label=""):
+            for container in containers:
+                name = container.get("name")
+                if name in image_lookup:
+                    old_image = container.get("image", "<none>")
+                    container["image"] = image_lookup[name]
+                    print(f"[{label}] Updated image for {name}: {old_image} → {container['image']}")
+
         for deployment in deployments:
-            if not isinstance(deployment, dict) or deployment.get("kind") != "Deployment":
+            if not isinstance(deployment, dict) :
                 modified_deployments.append(deployment)
                 continue
 
             metadata = deployment.setdefault("metadata", {})
             metadata["namespace"] = namespace
 
+            if deployment.get("kind") != "Deployment":
+                modified_deployments.append(deployment)
+                continue
+
             pod_spec = deployment.setdefault("spec", {}) \
                                  .setdefault("template", {}) \
                                  .setdefault("spec", {})
             containers_spec = pod_spec.setdefault("containers", [])
 
-            # Update images
-            for container in containers_spec:
-                name = container.get("name")
-                if name in image_lookup:
-                    container["image"] = image_lookup[name]
-                    print(f"Updated image for {name} to {container['image']}")
-
-            # Handle deployment strategy
             if strategy in ["rolling-update", "recreate"]:
+                update_container_images(containers_spec, image_lookup, label=strategy.upper())
+
                 deployment_strategy = deployment.setdefault("spec", {}).setdefault("strategy", {})
                 deployment_strategy["type"] = "RollingUpdate" if strategy == "rolling-update" else "Recreate"
+
                 modified_deployments.append(deployment)
 
-            elif strategy == "canary":
-                # Create canary and stable versions
+            elif strategy == "canary-stage1":
                 base_name = metadata["name"]
                 stable_deployment = copy.deepcopy(deployment)
                 canary_deployment = copy.deepcopy(deployment)
@@ -178,19 +180,29 @@ def deploy():
                 stable_labels["version"] = "stable"
                 canary_labels["version"] = "canary"
 
+                # Only update canary container images
+                canary_containers = canary_deployment["spec"]["template"]["spec"]["containers"]
+                update_container_images(canary_containers, image_lookup, label="CANARY")
+
                 modified_deployments.extend([stable_deployment, canary_deployment])
+
             else:
                 return jsonify({"message": f"Unsupported deployment strategy: {strategy}"}), 400
 
-        # Print final YAML for inspection
+        # Print and save modified YAML
         final_yaml_str = yaml.dump_all(modified_deployments, default_flow_style=False)
         print("Modified Deployment YAML:\n", final_yaml_str)
 
-        # Save the modified YAML (optional, but recommended)
-        output_path = os.path.join("/tmp", f"modified_{yaml_file}")
+        if strategy in ["rolling-update", "recreate"]:
+            output_path = yaml_path  # overwrite original
+        else:  # canary
+            output_path = os.path.join("/tmp", f"modified_{yaml_file}")
+
         with open(output_path, 'w') as f:
             f.write(final_yaml_str)
+
         print(f"Modified YAML saved to: {output_path}")
+
 
         return jsonify({
             "message": "Deployment YAML modified successfully",
@@ -201,6 +213,7 @@ def deploy():
     except Exception as e:
         print("Error during deployment:", e)
         return jsonify({"error": str(e)}), 500
+
 
 
 # @app.route('/api/deploy', methods=['POST'])
