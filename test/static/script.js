@@ -10,7 +10,6 @@ function loadImages() {
     .then(data => {
         images = data;
         updateImagesTable();
-        updateDeployUI();
         updateBundleUI();
         updateImageCount();
     })
@@ -250,39 +249,6 @@ document.getElementById('save-bundle-btn').addEventListener('click',async () => 
 });
 
 
-function updateDeployUI() {
-    // const deployList = document.getElementById('deploy-image-list');
-    // deployList.innerHTML = '';
-
-    // Object.entries(images).forEach(([imageName, tags]) => {
-    // deployList.innerHTML += `
-    //     <div class="form-group">
-    //     <label class="form-label">${imageName}</label>
-    //     <select class="form-select" id="deploy-${imageName}">
-    //         ${tags.map(tag => `<option value="${tag}">${tag}</option>`).join('')}
-    //     </select>
-    //     </div>
-    // `;
-    // });
-}
-
-function updateBundleList() {
-    // const list = document.getElementById('bundle-list');
-    // list.innerHTML = '';
-    
-    // Object.entries(bundles).forEach(([name, content]) => {
-    // const bundleHtml = `
-    //     <div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-    //     <h4 style="margin-bottom: 8px; color: #1e293b;">${name}</h4>
-    //     <div style="font-size: 14px; color: #64748b; margin-bottom: 12px;">
-    //         ${Object.entries(content).map(([img, tag]) => `${img}: ${tag}`).join(', ')}
-    //     </div>
-    //     <button class="btn btn-primary" onclick="loadBundle('${name}')">Load Bundle</button>
-    //     </div>
-    // `;
-    // list.innerHTML += bundleHtml;
-    // });
-}
 
 function updateImagesTable() {
     const tbody = document.getElementById('images-table-body');
@@ -355,6 +321,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     loadImages();
     loadBundles();
+    loadDeploymentFiles();
 });
 
 function setActiveTab(element) {
@@ -562,6 +529,25 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   }
 
+function loadDeploymentFiles() {
+  fetch('/api/deployment-files') 
+    .then(res => res.json())
+    .then(files => {
+      const select = document.getElementById('deployment-file-select');
+      files
+        .filter(name => name.endsWith('.yaml'))
+        .forEach(name => {
+          const option = document.createElement('option');
+          option.value = name;
+          option.textContent = name;
+          select.appendChild(option);
+        });
+    })
+    .catch(err => {
+      console.error('Failed to load deployment files', err);
+    });
+}
+
   function deployBundle(name) {
     let bundle = {}
     bundles.forEach((item)=> {
@@ -574,24 +560,34 @@ document.addEventListener('DOMContentLoaded', () => {
   
     const namespace = document.getElementById('namespace-select')?.value || 'default';
     const strategy = document.getElementById('strategy-select')?.value || 'RollingUpdate';
-    console.log(namespace,strategy);
+    const selectedYamlFile = document.getElementById('deployment-file-select')?.value || null;
+
+    if (!selectedYamlFile) {
+      alert("Please select a deployment YAML file.");
+      return;
+    }
+
+    const payload = {
+      namespace: namespace,
+      deployment_strategy: strategy,
+      images: bundle.images,
+      yaml_file: selectedYamlFile   
+    };
+
     fetch('/api/deploy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         namespace: namespace,
         deployment_strategy: strategy,
-        images: bundle.images  // should include {version, target}
+        yaml_file: selectedYamlFile,
+        images: bundle.images  // should include {version, target}  
       })
     })
     .then(res => res.json())
     .then(data => alert(data.message || "Deployment complete"))
     .catch(err => alert("Deployment failed"));
-    console.log({
-      namespace: namespace,
-      deployment_strategy: strategy,
-      images: bundle.images
-    });
+    console.log(payload);
     
   }
   
