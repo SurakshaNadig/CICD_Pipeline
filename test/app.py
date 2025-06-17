@@ -126,8 +126,10 @@ def deploy():
 
         with open(yaml_path, 'r') as f:
             deployments = list(yaml.safe_load_all(f))
+            print("dep",deployments)
 
         modified_deployments = []
+        update_deployments = []
 
         def update_container_images(containers, image_lookup, label=""):
             for container in containers:
@@ -140,6 +142,7 @@ def deploy():
         for deployment in deployments:
             if not isinstance(deployment, dict):
                 modified_deployments.append(deployment)
+                update_deployments.append(deployment)
                 continue
 
             metadata = deployment.setdefault("metadata", {})
@@ -147,7 +150,10 @@ def deploy():
 
             if deployment.get("kind") != "Deployment":
                 modified_deployments.append(deployment)
+                if deployment.get("kind") != "Service":
+                    update_deployments.append(deployment)
                 continue
+
 
             pod_spec = deployment.setdefault("spec", {}) \
                                  .setdefault("template", {}) \
@@ -204,20 +210,96 @@ def deploy():
                     canary_labels.pop("version", None)  #clean up
                     modified_deployments.append(canary_deployment)
 
+
+            elif strategy.startswith("blue-green-stage"):
+                stage_num = int(strategy.split("blue-green-stage")[-1])
+                base_name = metadata["name"]
+
+                # Find the matching Service from the full deployments list
+                service = None
+                for d in deployments:
+                    if d.get("kind") == "Service" and d.get("metadata", {}).get("name") == base_name:
+                        service = d
+                        break
+
+                
+                # Create blue and green deployments
+                blue_deployment = copy.deepcopy(deployment)
+                green_deployment = copy.deepcopy(deployment)
+
+                blue_deployment["metadata"]["name"] = f"{base_name}-blue"
+                green_deployment["metadata"]["name"] = f"{base_name}-green"
+
+                blue_labels = blue_deployment["spec"]["template"].setdefault("metadata", {}).setdefault("labels", {})
+                green_labels = green_deployment["spec"]["template"].setdefault("metadata", {}).setdefault("labels", {})
+
+                blue_labels["version"] = "blue"
+                green_labels["version"] = "green"
+
+                blue_deployment["spec"]["selector"]["matchLabels"]["version"] = "blue"
+                green_deployment["spec"]["selector"]["matchLabels"]["version"] = "green"
+
+                # Update only green deployment containers
+                update_container_images(green_deployment["spec"]["template"]["spec"]["containers"], image_lookup, label="BLUE-GREEN-GREEN")
+
+                for d in (blue_deployment, green_deployment):
+                    d["spec"].setdefault("strategy", {})["type"] = "RollingUpdate"
+
+                if stage_num == 1:
+
+                    # Modify existing Service selector to point to blue version (in place)
+                    if service:
+                        service["spec"]["selector"]["version"] = "blue"
+
+                    else:
+                        print(f"Service for {base_name} not found during blue-green stage 1")
+
+                    # Append modified deployments and service to output
+                    modified_deployments.extend([blue_deployment, green_deployment])
+
+                elif stage_num == 2:
+
+                    # Modify existing Service selector to point to blue version (in place)
+                    if service:
+                        service["spec"]["selector"]["version"] = "green"
+
+                    else:
+                        print(f"Service for {base_name} not found during blue-green stage 2")
+
+                    # Append modified deployments and service to output
+                    modified_deployments.extend([blue_deployment, copy.deepcopy(green_deployment)])
+
+                    green_deployment["metadata"]["name"] = base_name
+                    green_labels.pop("version", None)  #clean up
+                    green_deployment["spec"]["selector"]["matchLabels"].pop("version",None) #clean up
+                    service_copy = copy.deepcopy(service)
+                    service_copy["spec"]["selector"].pop("version", None)
+                    service_copy["metadata"]["namespace"]= namespace
+                    update_deployments.append([green_deployment, service_copy])
+
+                else:
+                    return jsonify({"message": f"Unsupported blue-green stage: {strategy}"}), 400
+
             else:
                 return jsonify({"message": f"Unsupported deployment strategy: {strategy}"}), 400
 
         final_yaml_str = yaml.dump_all(modified_deployments, default_flow_style=False)
+        update_yaml_str = yaml.dump_all(update_deployments, default_flow_style=False)
         print("Modified Deployment YAML:\n", final_yaml_str)
 
         # Determine file path
-        if strategy in ["rolling-update", "recreate"] or strategy == "canary-stage4":
+        if strategy in ["rolling-update", "recreate"] or strategy == "canary-stage4" or strategy == "blue-green-stage2":
             output_path = yaml_path  # overwrite original
+
         else:
             output_path = os.path.join("/tmp", f"modified_{yaml_file}")
 
         with open(output_path, 'w') as f:
-            f.write(final_yaml_str)
+            if(strategy != "blue-green-stage2"):
+                f.write(final_yaml_str)
+            else:
+                f.write(update_yaml_str)
+
         print(f"Modified YAML saved to: {output_path}")
 
         return jsonify({
