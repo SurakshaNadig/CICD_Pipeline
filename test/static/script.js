@@ -324,6 +324,29 @@ document.addEventListener('DOMContentLoaded', function() {
     loadDeploymentFiles();
 });
 
+function triggerRollback(service, namespace) {
+  if (!confirm(`Are you sure you want to rollback deployment '${service}' in namespace '${namespace}'?`)) {
+    return;
+  }
+
+  fetch("/api/rollback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ service, namespace })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.message) {
+      alert(data.message);
+    } else {
+      alert("Error: " + data.error);
+    }
+  })
+  .catch(err => {
+    console.error("Rollback failed:", err);
+    alert("Unexpected error during rollback");
+  });
+}
 function setActiveTab(element) {
     document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'))
     element.classList.add('active');
@@ -346,6 +369,34 @@ document.addEventListener('DOMContentLoaded', () => {
     const STORAGE_KEY = 'deploymentTargets';
     let targets = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
   
+    fetch("/api/running-deployments")
+    .then(res => res.json())
+    .then(data => {
+      const cloudTbody = document.querySelector("#cloud-tbody");
+  
+      cloudTbody.innerHTML = "";
+
+
+      data.forEach(deployment => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="px-6 py-4 font-mono text-gray-800">${deployment.service}</td>
+          <td class="px-6 py-4 text-blue-700">${deployment.namespace}</td>
+          <td class="px-6 py-4">${deployment.image_tag}</td>
+          <td class="px-6 py-4 whitespace-nowrap">${deployment.replicas}</td>
+          <td class="px-6 py-4">
+            <button class="text-red-600 hover:text-red-800 font-semibold" onclick="triggerRollback('${deployment.service}', '${deployment.namespace}')">
+              Rollback
+            </button>
+          </td>
+        `;
+        cloudTbody.appendChild(tr);
+      });
+    })
+    .catch(err => console.error("Error loading deployments:", err));
+
+
+
     function saveTargets() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(targets));
     }
@@ -529,6 +580,18 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   }
 
+  document.getElementById('yaml-upload').addEventListener('change', function(event) {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const text = e.target.result;
+        document.getElementById('yaml-preview').textContent = text;
+        document.getElementById('yaml-preview-container').classList.remove('hidden');
+      };
+      reader.readAsText(file);
+    }
+  });
 function loadDeploymentFiles() {
   fetch('/api/deployment-files') 
     .then(res => res.json())
@@ -547,6 +610,35 @@ function loadDeploymentFiles() {
       console.error('Failed to load deployment files', err);
     });
 }
+
+// document.getElementById('deployment-file-select').addEventListener('change', function () {
+//   const selectedFile = this.value;
+//   if (selectedFile) {
+//     fetchDeploymentPreview(selectedFile);
+//   }
+// });
+
+// function fetchDeploymentPreview(filename) {
+//   fetch(`/api/deployment-files/${encodeURIComponent(filename)}`)
+//     .then(res => {
+//       if (!res.ok) {
+//         throw new Error(`Failed to load ${filename}`);
+//       }
+//       return res.text(); // Assume it's plain YAML text
+//     })
+//     .then(content => {
+//       displayPreview(content);
+//     })
+//     .catch(err => {
+//       console.error('Error fetching deployment preview', err);
+//       displayPreview('⚠️ Failed to load preview.');
+//     });
+// }
+// function displayPreview(content) {
+//   const preview = document.getElementById('deployment-preview');
+//   preview.textContent = content;
+// }
+
 
   function deployBundle(name) {
     let bundle = {}

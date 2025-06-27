@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, render_template, request
+from werkzeug.utils import secure_filename
 import re
 from packaging.version import Version  
 from datetime import datetime
@@ -17,7 +18,6 @@ version_pattern = re.compile(r'^v?(\d+\.\d+(\.\d+)*)$')
 app = Flask(__name__, template_folder='templates')
 REGISTRY_URL = "http://cicd.ias.uni-stuttgart.de:5000"
 DEPLOYMENT_YAML_PATH = "/tmp/flask-demo-latest.yaml"
-DEPLOYMENT_NAME = "flask-demo-latest"
 
 BUNDLES_FILE = "bundles.json"
 NOTIFICATIONS_FILE = "notification.json"
@@ -183,7 +183,7 @@ def deploy():
                 stable_deployment = copy.deepcopy(deployment)
                 canary_deployment = copy.deepcopy(deployment)
 
-                stable_deployment["metadata"]["name"] = f"{base_name}-stable"
+                stable_deployment["metadata"]["name"] = f"{base_name}"
                 canary_deployment["metadata"]["name"] = f"{base_name}-canary"
 
                 stable_deployment["spec"]["replicas"] = stable_replicas
@@ -227,7 +227,7 @@ def deploy():
                 blue_deployment = copy.deepcopy(deployment)
                 green_deployment = copy.deepcopy(deployment)
 
-                blue_deployment["metadata"]["name"] = f"{base_name}-blue"
+                blue_deployment["metadata"]["name"] = f"{base_name}"
                 green_deployment["metadata"]["name"] = f"{base_name}-green"
 
                 blue_labels = blue_deployment["spec"]["template"].setdefault("metadata", {}).setdefault("labels", {})
@@ -275,7 +275,7 @@ def deploy():
                     service_copy = copy.deepcopy(service)
                     service_copy["spec"]["selector"].pop("version", None)
                     service_copy["metadata"]["namespace"]= namespace
-                    update_deployments.append([green_deployment, service_copy])
+                    update_deployments.extend([green_deployment, service_copy])
 
                 else:
                     return jsonify({"message": f"Unsupported blue-green stage: {strategy}"}), 400
@@ -288,19 +288,33 @@ def deploy():
         print("Modified Deployment YAML:\n", final_yaml_str)
 
         # Determine file path
-        if strategy in ["rolling-update", "recreate"] or strategy == "canary-stage4" or strategy == "blue-green-stage2":
+        if strategy in ["rolling-update", "recreate"] or strategy == "canary-stage4" :
             output_path = yaml_path  # overwrite original
 
         else:
             output_path = os.path.join("/tmp", f"modified_{yaml_file}")
 
         with open(output_path, 'w') as f:
-            if(strategy != "blue-green-stage2"):
-                f.write(final_yaml_str)
-            else:
+            f.write(final_yaml_str)
+
+        if strategy == "blue-green-stage2":
+            with open(yaml_path, 'w') as f:
                 f.write(update_yaml_str)
 
         print(f"Modified YAML saved to: {output_path}")
+
+        # Apply the YAML to the cluster
+        try:
+            print(f"Applying YAML to cluster: {output_path}")
+            result = subprocess.run(
+                ["kubectl", "apply", "-f", output_path],
+                capture_output=True, text=True, check=True
+            )
+            print("kubectl apply output:", result.stdout)
+        except subprocess.CalledProcessError as e:
+            print("kubectl apply error:", e.stderr)
+            return jsonify({"error": "Failed to apply deployment YAML", "details": e.stderr}), 500
+
 
         return jsonify({
             "message": "Deployment YAML modified successfully",
@@ -316,10 +330,21 @@ def deploy():
 @app.route('/api/rollback', methods=['POST'])
 def rollback():
     try:
-        subprocess.run(['kubectl', 'rollout', 'undo', f'deployment/{DEPLOYMENT_NAME}', '--namespace', NAMESPACE], check=True)
-        return jsonify({"message": "Rollback triggered successfully."})
+        data = request.get_json()
+        service = data.get("service")
+        namespace = data.get("namespace")
+        if not service or not namespace:
+            return jsonify({"error": "Missing service or namespace"}), 400
+
+        result = subprocess.run(
+            ['kubectl', 'rollout', 'undo', f'deployment/{service}', '--namespace', namespace],
+            check=True, capture_output=True, text=True
+        )
+        return jsonify({"message": f"Rollback triggered successfully: {result.stdout.strip()}"}), 200
+
     except subprocess.CalledProcessError as e:
-        return jsonify({"error": e.stderr.decode()}), 500
+        return jsonify({"error": e.stderr.strip() if e.stderr else str(e)}), 500
+
 
 @app.route('/api/bundles', methods=['GET'])
 def api_get_bundles():
@@ -398,6 +423,30 @@ def list_namespaces():
 
     except subprocess.CalledProcessError as e:
         return jsonify({"error": f"Failed to get namespaces: {e}"}), 500
+
+@app.route('/api/running-deployments', methods=['GET'])
+def running_deployments():
+    try:
+        result = subprocess.run(
+            ["kubectl", "get", "deployments", "--all-namespaces", "-o", "json"],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        deployments_json = json.loads(result.stdout)
+        deployments = []
+        for item in deployments_json.get("items", []):
+            deployments.append({
+                "service": item["metadata"]["name"],
+                "namespace": item["metadata"]["namespace"],
+                "image_tag": item["spec"]["template"]["spec"]["containers"][0]["image"].split(":")[-1],
+                "replicas": item["spec"].get("replicas", 0),
+            })
+        return jsonify(deployments)
+    except subprocess.CalledProcessError as e:
+        return jsonify({"error": e.stderr}), 500
+
+
 
 @app.route('/')
 def index():
