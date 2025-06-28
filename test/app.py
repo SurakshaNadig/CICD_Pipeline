@@ -89,6 +89,25 @@ def get_images():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+from deployment_queue import load_queue
+
+@app.route('/api/pending/<container_name>', methods=['GET'])
+def get_pending_deployments(container_name):
+    queue = load_queue()
+    container_jobs = [item for item in queue if item['container'] == container_name]
+    return jsonify(container_jobs), 200
+
+from deployment_queue import remove_from_queue
+
+@app.route('/api/clear_pending', methods=['POST'])
+def clear_pending():
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    remove_from_queue(data)
+    return jsonify({"status": "removed"}), 200
+
 
 @app.route('/api/deploy', methods=['POST'])
 def deploy():
@@ -102,6 +121,8 @@ def deploy():
         yaml_file = data.get("yaml_file")
 
         print(f"Namespace: {namespace}, Strategy: {strategy}, YAML file: {yaml_file}")
+
+        from deployment_queue import add_to_queue
 
         def deploy_to_ugv(image_name, version, container, retries=3, delay=15):
             url = f"{UGV_SERVER_URL}/deploy"
@@ -121,10 +142,12 @@ def deploy():
                         print(f"UGV responded with error: {response.status_code}, {response.text}")
                 except requests.exceptions.RequestException:
                     print(f"{container} might be offline. Retrying in {delay} seconds...")
-                
+
                 time.sleep(delay)
 
-            raise RuntimeError(f"Failed to deploy image to {container} after {retries} attempts.")
+            print(f"Saving failed deployment for {container} to queue.")
+            add_to_queue(payload)
+
 
         UGV_GROUPS = {
             "UGV-Group1": ["ugv1", "ugv2"],
