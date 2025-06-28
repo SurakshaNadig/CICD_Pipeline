@@ -9,6 +9,8 @@ import yaml
 import os
 import json
 import copy
+import time
+
 
 
 
@@ -100,6 +102,56 @@ def deploy():
         yaml_file = data.get("yaml_file")
 
         print(f"Namespace: {namespace}, Strategy: {strategy}, YAML file: {yaml_file}")
+
+        def deploy_to_ugv(image_name, version, container, retries=3, delay=15):
+            url = f"{UGV_SERVER_URL}/deploy"
+            payload = {
+                "container": container,
+                "image": f"{REGISTRY_URL.replace('http://', '')}/{image_name}:{version}"
+            }
+
+            for attempt in range(retries):
+                try:
+                    print(f"Trying to deploy to {container} (attempt {attempt+1})...")
+                    response = requests.post(url, json=payload, timeout=5)
+                    if response.status_code == 200:
+                        print(f"Deployment to {container} successful.")
+                        return
+                    else:
+                        print(f"UGV responded with error: {response.status_code}, {response.text}")
+                except requests.exceptions.RequestException:
+                    print(f"{container} might be offline. Retrying in {delay} seconds...")
+                
+                time.sleep(delay)
+
+            raise RuntimeError(f"Failed to deploy image to {container} after {retries} attempts.")
+
+        UGV_GROUPS = {
+            "UGV-Group1": ["ugv1", "ugv2"],
+            "UGV-Group2": ["ugv3", "ugv4"],
+            "UGV-Group3": ["ugv5"]
+        }
+
+        UGV_SERVER_URL = "http://129.69.81.194:5050"
+
+        ugv_targets = {
+            name: info["version"]
+            for name, info in images.items()
+            if info.get("env", "").startswith("UGV-Group")
+        }
+
+        for image_name, version in ugv_targets.items():
+            group = images[image_name]["env"]
+            containers = UGV_GROUPS.get(group, [])
+            print(containers)
+
+            for container_name in containers:
+                try:
+                    deploy_to_ugv(image_name, version, container_name)
+                except Exception as e:
+                    print(f"Failed to deploy {image_name}:{version} to {container_name}: {e}")
+
+        
 
         # Filter server-targeted images
         server_images = {
